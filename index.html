@@ -11,137 +11,154 @@
     <style>
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
         :root { --color-teal: #00BFA5; --font-pretendard: 'Pretendard', sans-serif; }
-        body { font-family: var(--font-pretendard); background-color: #FFFFFF; color: #191F28; -webkit-font-smoothing: antialiased; }
-        
-        @keyframes pulse-attention { 0%, 100% { transform: scale(1); box-shadow: 0 4px 12px rgba(0, 191, 165, 0.2); } 50% { transform: scale(1.03); box-shadow: 0 0 0 4px rgba(0, 191, 165, 0.15); } }
-        .animate-pulse-attention { animation: pulse-attention 2.5s infinite cubic-bezier(0.4, 0, 0.2, 1); }
-        .result-card { background-color: #F7F9FB; border-radius: 20px; transition: all 0.4s ease; }
-        
-        .perspective-1000 { perspective: 1000px; }
-        .flip-card-inner { transition: transform 0.6s; transform-style: preserve-3d; position: relative; }
-        .is-flipped { transform: rotateY(180deg); }
-        .flip-card-front, .flip-card-back { backface-visibility: hidden; position: absolute; width: 100%; top: 0; left: 0; }
-        .flip-card-back { transform: rotateY(180deg); }
+        body { font-family: var(--font-pretendard); background-color: #F7F9FB; color: #191F28; -webkit-font-smoothing: antialiased; }
+        .btn-primary { background-color: var(--color-teal); color: white; transition: all 0.2s; }
+        .animate-pulse-attention { animation: pulse 2.5s infinite; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState } = React;
 
-        // 2026년 전남 교육행정 여비 규정 데이터
+        // 2026년 여비 규정
         const CONFIG = {
-            OUT_DAILY: 25000,   // 관외 일비
+            OUT_DAILY: 25000,   // 관외 일비 인상분
             OUT_MEAL: 25000,    // 관외 식비
             IN_DAILY_LONG: 20000, // 관내 (4시간 이상)
             IN_DAILY_SHORT: 10000, // 관내 (4시간 미만)
-            BUS_RATE: 168.6,
-            BASE_FARE: 1800
+            JUSO_KEY: "TESTJUSOGOKR" // 실제 승인키로 교체 필요
         };
 
         const App = () => {
             const [origin, setOrigin] = useState('');
             const [destination, setDestination] = useState('');
-            const [travelType, setTravelType] = useState('OUT'); // 'IN' 또는 'OUT'
+            const [travelType, setTravelType] = useState('OUT');
             const [distance, setDistance] = useState(0);
-            const [isFlipped, setIsFlipped] = useState(false);
+            const [deductions, setDeductions] = useState({ gov_vehicle: false, short_time: false, meal_count: 0 });
             
-            const [deductions, setDeductions] = useState({
-                gov_vehicle: false,
-                short_time: false, // 관내 4시간 미만용
-                meal_count: 0
-            });
+            // 주소 검색 관련 상태
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [searchTarget, setSearchTarget] = useState(''); // 'origin' or 'destination'
+            const [keyword, setKeyword] = useState('');
+            const [searchResults, setSearchResults] = useState([]);
 
-            const calculate = () => {
-                let daily = 0;
-                let meal = 0;
-
-                if (travelType === 'OUT') {
-                    daily = CONFIG.OUT_DAILY;
-                    if (deductions.gov_vehicle) daily = daily / 2; // 관외 관용차 50% 감액
-                    meal = CONFIG.OUT_MEAL - (deductions.meal_count * (CONFIG.OUT_MEAL / 3));
-                } else {
-                    daily = deductions.short_time ? CONFIG.IN_DAILY_SHORT : CONFIG.IN_DAILY_LONG;
-                    if (deductions.gov_vehicle) daily = daily - 10000; // 관내 관용차 1만원 감액
-                    meal = 0;
+            // 보내주신 특수문자 및 SQL 예약어 체크 로직
+            const checkSearchedWord = (word) => {
+                if (word.length > 0) {
+                    const expText = /[%=><]/;
+                    if (expText.test(word)) { alert("특수문자를 입력할 수 없습니다."); return false; }
+                    const sqlArray = ["OR", "SELECT", "INSERT", "DELETE", "UPDATE", "CREATE", "DROP", "EXEC", "UNION", "FETCH", "DECLARE", "TRUNCATE"];
+                    for (let sql of sqlArray) {
+                        const regex = new RegExp(sql, "gi");
+                        if (regex.test(word)) { alert(sql + "와 같은 특정문자로 검색할 수 없습니다."); return false; }
+                    }
                 }
-
-                // 거리 기반 교통비 (km당 요율 계산)
-                const transport = Math.round((CONFIG.BASE_FARE + (distance > 10 ? (distance - 10) * CONFIG.BUS_RATE : 0)) / 100) * 100;
-
-                return { daily, meal, transport: transport * 2, total: daily + meal + (transport * 2) };
+                return true;
             };
 
-            const costs = calculate();
+            // 주소 API 호출 (JSONP 방식의 현대적 fetch 구현)
+            const searchAddr = () => {
+                if (!checkSearchedWord(keyword)) return;
+                
+                const url = `https://business.juso.go.kr/addrlink/addrLinkApi.do?currentPage=1&countPerPage=10&keyword=${encodeURIComponent(keyword)}&confmKey=${CONFIG.JUSO_KEY}&resultType=json`;
+                
+                fetch(url)
+                    .then(res => res.json())
+                    .then(json => {
+                        if (json.results.common.errorCode !== "0") {
+                            alert(json.results.common.errorMessage);
+                        } else {
+                            setSearchResults(json.results.juso);
+                        }
+                    })
+                    .catch(() => alert("에러가 발생했습니다."));
+            };
+
+            const selectAddr = (juso) => {
+                // 시/도 + 시/군/구 + 읍/면/동까지만 추출 (전현우 님 요청 반영)
+                const addr = `${juso.siNm} ${juso.sggNm} ${juso.emdNm}`.trim();
+                if (searchTarget === 'origin') setOrigin(addr);
+                else setDestination(addr);
+                setIsModalOpen(false);
+                setSearchResults([]);
+                setKeyword('');
+            };
+
+            const costs = (() => {
+                let daily = travelType === 'OUT' ? CONFIG.OUT_DAILY : (deductions.short_time ? CONFIG.IN_DAILY_SHORT : CONFIG.IN_DAILY_LONG);
+                if (deductions.gov_vehicle) daily = travelType === 'OUT' ? daily / 2 : daily - 10000;
+                let meal = travelType === 'OUT' ? CONFIG.OUT_MEAL - (deductions.meal_count * (CONFIG.OUT_MEAL / 3)) : 0;
+                const transport = Math.round((1800 + (distance > 10 ? (distance - 10) * 168.6 : 0)) / 100) * 100;
+                return { daily, meal, transport: transport * 2, total: daily + meal + (transport * 2) };
+            })();
 
             return (
-                <div className="max-w-[480px] mx-auto p-5 min-h-screen">
+                <div className="max-w-[480px] mx-auto p-5 min-h-screen relative">
                     <header className="text-center mb-8">
                         <h1 className="text-2xl font-bold text-gray-900">yeobi_easy for KOR</h1>
-                        <p className="text-[10px] font-bold text-teal-500 mt-1">2026 전라남도교육청 여비 규정 준수</p>
+                        <p className="text-[10px] font-bold text-teal-500 mt-1">2026 교육행정 실무 최적화</p>
                     </header>
 
+                    {/* 주소 입력 및 검색 버튼 */}
                     <div className="space-y-4 mb-6">
-                        <div className="bg-gray-50 p-4 rounded-2xl">
-                            <label className="block text-[10px] font-bold text-gray-400 mb-1">출발지 (시/군/구/읍/동)</label>
-                            <input type="text" className="w-full bg-transparent outline-none font-bold text-lg" placeholder="예: 함평군, 동작구" value={origin} onChange={e => setOrigin(e.target.value)} />
-                        </div>
-                        <div className="bg-gray-50 p-4 rounded-2xl">
-                            <label className="block text-[10px] font-bold text-gray-400 mb-1">목적지 (시/군/구/읍/동)</label>
-                            <input type="text" className="w-full bg-transparent outline-none font-bold text-lg" placeholder="예: 문내면, 세종시" value={destination} onChange={e => setDestination(e.target.value)} />
-                        </div>
+                        {['origin', 'destination'].map(target => (
+                            <div key={target} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                                <label className="text-[10px] font-bold text-gray-400 block mb-2">{target === 'origin' ? '출발지' : '목적지'}</label>
+                                <div className="flex gap-2">
+                                    <input type="text" readOnly className="flex-1 bg-transparent font-bold outline-none" value={target === 'origin' ? origin : destination} placeholder="주소를 검색하세요" />
+                                    <button onClick={() => { setIsModalOpen(true); setSearchTarget(target); }} className="px-3 py-1 bg-teal-50 text-teal-600 rounded-lg text-xs font-bold">검색</button>
+                                </div>
+                            </div>
+                        ))}
+                        
                         <div className="flex gap-2">
-                            <button onClick={() => setTravelType('IN')} className={`flex-1 p-3 rounded-xl font-bold text-sm ${travelType === 'IN' ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-400'}`}>관내 출장</button>
-                            <button onClick={() => setTravelType('OUT')} className={`flex-1 p-3 rounded-xl font-bold text-sm ${travelType === 'OUT' ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-400'}`}>관외 출장</button>
+                            {['IN', 'OUT'].map(type => (
+                                <button key={type} onClick={() => setTravelType(type)} className={`flex-1 p-3 rounded-xl font-bold text-sm ${travelType === type ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-400'}`}>{type === 'IN' ? '관내' : '관외'}</button>
+                            ))}
                         </div>
+
                         <div className="bg-gray-50 p-4 rounded-2xl">
-                            <label className="block text-[10px] font-bold text-gray-400 mb-1">편도 거리 (km) - 교통비 산출용</label>
-                            <input type="number" className="w-full bg-transparent outline-none font-bold text-lg" value={distance} onChange={e => setDistance(parseFloat(e.target.value) || 0)} />
+                            <label className="block text-[10px] font-bold text-gray-400 mb-1">편도 거리 (km)</label>
+                            <input type="number" className="w-full bg-transparent outline-none font-bold" value={distance} onChange={e => setDistance(parseFloat(e.target.value) || 0)} />
                         </div>
                     </div>
 
-                    <div className="perspective-1000 h-[380px] mb-6">
-                        <div className={`flip-card-inner h-full ${isFlipped ? 'is-flipped' : ''}`}>
-                            {/* FRONT: 요약 내역 */}
-                            <div className="flip-card-front h-full result-card p-8 flex flex-col justify-between border border-gray-100 shadow-xl">
-                                <div className="text-center">
-                                    <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-1 rounded-full">{travelType === 'IN' ? '관내' : '관외'} 여비 요약</span>
-                                    <h2 className="text-4xl font-black text-gray-900 mt-6">{costs.total.toLocaleString()}<span className="text-lg font-medium ml-1">원</span></h2>
-                                    <p className="text-xs text-gray-400 mt-2">{origin || '미정'} ↔ {destination || '미정'}</p>
-                                </div>
-                                <button onClick={() => setIsFlipped(true)} className="w-full py-4 bg-teal-500 text-white rounded-2xl font-bold animate-pulse-attention">감액 설정 및 상세 보기</button>
-                            </div>
+                    {/* 결과 대시보드 */}
+                    <div className="bg-[#F7F9FB] p-8 rounded-[32px] text-center border border-gray-100 shadow-xl">
+                        <h2 className="text-4xl font-black text-gray-900">{costs.total.toLocaleString()}<span className="text-lg font-medium ml-1">원</span></h2>
+                        <div className="mt-6 pt-6 border-t border-dashed border-gray-200 text-xs space-y-2">
+                            <div className="flex justify-between"><span>일비</span><span className="font-bold">{costs.daily.toLocaleString()}원</span></div>
+                            <div className="flex justify-between"><span>식비</span><span className="font-bold">{costs.meal.toLocaleString()}원</span></div>
+                            <div className="flex justify-between"><span>왕복 교통비</span><span className="font-bold">{costs.transport.toLocaleString()}원</span></div>
+                        </div>
+                    </div>
 
-                            {/* BACK: 감액 설정 및 상세 내역 */}
-                            <div className="flip-card-back h-full result-card p-6 border-2 border-teal-500/20 shadow-2xl overflow-y-auto">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="font-bold text-gray-900 text-sm">감사 대비 상세 설정</h3>
-                                    <button onClick={() => setIsFlipped(false)} className="text-xs font-bold text-gray-400">닫기</button>
+                    {/* 주소 검색 모달 */}
+                    {isModalOpen && (
+                        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-slide-up">
+                                <div className="flex justify-between mb-4">
+                                    <h3 className="font-bold">행정구역 검색</h3>
+                                    <button onClick={() => setIsModalOpen(false)}>×</button>
                                 </div>
-                                
-                                <div className="space-y-3 mb-6">
-                                    <button onClick={() => setDeductions(p => ({...p, gov_vehicle: !p.gov_vehicle}))} className={`w-full p-3 rounded-xl text-left text-xs font-bold transition-all ${deductions.gov_vehicle ? 'bg-teal-500 text-white' : 'bg-white border border-gray-100 text-gray-600'}`}>관용차량 이용 (일비 감액)</button>
-                                    {travelType === 'IN' ? (
-                                        <button onClick={() => setDeductions(p => ({...p, short_time: !p.short_time}))} className={`w-full p-3 rounded-xl text-left text-xs font-bold transition-all ${deductions.short_time ? 'bg-teal-500 text-white' : 'bg-white border border-gray-100 text-gray-600'}`}>4시간 미만 출장</button>
-                                    ) : (
-                                        <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100">
-                                            <span className="text-xs font-bold text-gray-600">식사 제공 감액</span>
-                                            <select className="text-xs font-bold outline-none" value={deductions.meal_count} onChange={e => setDeductions(p => ({...p, meal_count: parseInt(e.target.value)}))}>
-                                                <option value="0">0식</option><option value="1">1식</option><option value="2">2식</option><option value="3">3식</option>
-                                            </select>
+                                <div className="flex gap-2 mb-4">
+                                    <input type="text" className="flex-1 border-b-2 border-teal-500 outline-none p-2" placeholder="읍/면/동 입력" value={keyword} onChange={e => setKeyword(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchAddr()} />
+                                    <button onClick={searchAddr} className="bg-teal-500 text-white px-4 py-2 rounded-xl font-bold">조회</button>
+                                </div>
+                                <div className="max-h-60 overflow-y-auto space-y-2">
+                                    {searchResults.map((j, i) => (
+                                        <div key={i} onClick={() => selectAddr(j)} className="p-3 hover:bg-teal-50 cursor-pointer rounded-xl border border-gray-50 text-sm">
+                                            <p className="font-bold text-gray-800">{j.siNm} {j.sggNm} {j.emdNm}</p>
+                                            <p className="text-[10px] text-gray-400 mt-1">{j.roadAddr}</p>
                                         </div>
-                                    )}
-                                </div>
-
-                                <div className="pt-4 border-t border-dashed border-gray-200 text-xs space-y-2">
-                                    <div className="flex justify-between"><span>일비</span><span>{costs.daily.toLocaleString()}원</span></div>
-                                    <div className="flex justify-between"><span>식비</span><span>{costs.meal.toLocaleString()}원</span></div>
-                                    <div className="flex justify-between"><span>왕복 교통비</span><span>{costs.transport.toLocaleString()}원</span></div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             );
         };
