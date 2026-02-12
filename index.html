@@ -111,52 +111,60 @@
         </div>
     </div>
 
-    <script>
-        const SERVICE_KEY = "47a79741c5cfeead2314a79c59b1c6114705107cc1066d9cd366a2d9333e5422";
+<script>
+    // 1. 여기서 Encoding 키와 Decoding 키를 번갈아 가며 넣어보세요.
+    const SERVICE_KEY = "47a79741c5cfeead2314a79c59b1c6114705107cc1066d9cd366a2d9333e5422";
 
-        async function getDistance() {
-            const depId = document.getElementById('depTerminal').value;
-            const arrId = document.getElementById('arrTerminal').value;
+    async function getDistance() {
+        const depId = document.getElementById('depTerminal').value;
+        const arrId = document.getElementById('arrTerminal').value;
+        
+        if(depId === arrId) { alert("출발지와 도착지가 같습니다."); return; }
+
+        // 현재 승인받으신 '시외버스정보' API 주소입니다.
+        const url = `https://apis.data.go.kr/1613000/SuburbsBusInfoService/getRouteInfo?serviceKey=${SERVICE_KEY}&depTerminalId=${depId}&arrTerminalId=${arrId}&_type=json`;
+
+        try {
+            const response = await fetch(url);
             
-            if(depId === arrId) { alert("출발지와 도착지가 같습니다."); return; }
-
-            const url = `https://apis.data.go.kr/1613000/SuburbsBusInfoService/getRouteInfo?serviceKey=${SERVICE_KEY}&depTerminalId=${depId}&arrTerminalId=${arrId}&_type=json`;
-
-            try {
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                // API 데이터 구조에 따른 거리 추출 로직
-                const item = data.response.body.items.item;
-                const routeDistance = Array.isArray(item) ? item[0].routeDistance : item.routeDistance;
-                
-                if (routeDistance) {
-                    document.getElementById('distance').value = routeDistance;
-                } else {
-                    alert("해당 노선의 거리 정보를 찾을 수 없습니다. 수동으로 입력해 주세요.");
-                }
-            } catch (error) {
-                alert("API 호출에 실패했습니다. 인증키 승인 대기 중이거나 일시적인 네트워크 오류일 수 있습니다.");
+            if (!response.ok) {
+                throw new Error(`서버 응답 오류 (상태코드: ${response.status})`);
             }
-        }
 
-        function calculateFare() {
-            const distance = parseFloat(document.getElementById('distance').value);
-            const type = document.getElementById('busType').value;
-
-            if (!distance || distance <= 0) { alert("거리 정보를 먼저 확보해 주세요."); return; }
-
-            // 2026.01.20 개정 요율
-            const RATES = { intercity: 168.60, express: 81.40, premium: 115.00 };
-            const BASE_FARE = 1800;
-
-            let fare = distance <= 10 ? BASE_FARE : BASE_FARE + (distance - 10) * RATES[type];
+            const data = await response.json();
             
-            // 100원 단위 사사오입
-            const finalFare = Math.round(fare / 100) * 100;
+            // 공공데이터포털 에러 코드 확인
+            if (data.response.header.resultCode !== "00") {
+                throw new Error(`API 에러: ${data.response.header.resultMsg} (코드: ${data.response.header.resultCode})`);
+            }
+
+            const item = data.response.body.items.item;
+            const routeDistance = Array.isArray(item) ? item[0].routeDistance : item.routeDistance;
             
-            document.getElementById('fare-text').innerText = finalFare.toLocaleString();
+            if (routeDistance) {
+                document.getElementById('distance').value = routeDistance;
+                alert("거리 조회 성공!");
+            } else {
+                alert("해당 노선의 거리 정보가 API에 등록되어 있지 않습니다.");
+            }
+        } catch (error) {
+            // 구체적인 에러 내용을 팝업으로 띄웁니다.
+            alert("조회 실패 원인: " + error.message + "\n\n(Tip: 승인 후 24시간이 지나지 않았거나, 인증키 종류를 바꿔보세요.)");
         }
-    </script>
+    }
+
+    function calculateFare() {
+        const distance = parseFloat(document.getElementById('distance').value);
+        const type = document.getElementById('busType').value;
+        if (!distance) { alert("거리를 먼저 확인해주세요."); return; }
+
+        const RATES = { intercity: 168.60, express: 81.40, premium: 115.00 }; // 2026.01.20 개정 요율 적용
+        const BASE_FARE = 1800;
+        let fare = distance <= 10 ? BASE_FARE : BASE_FARE + (distance - 10) * RATES[type];
+        const finalFare = Math.round(fare / 100) * 100;
+        document.getElementById('fare-text').innerText = finalFare.toLocaleString();
+    }
+</script>
+
 </body>
 </html>
