@@ -2,119 +2,160 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Yobi_Easier: 전국 여비 자동 계산기 (API 연동판)</title>
+    <title>Yobi_Easier: 전남 여비 자동 계산기 (Full Terminal List)</title>
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; padding: 20px; background-color: #f4f7f6; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px; }
-        .input-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        select, input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        .btn-box { display: flex; gap: 10px; margin-top: 10px; }
-        button { flex: 1; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 15px; }
-        .btn-api { background-color: #27ae60; color: white; }
-        .btn-calc { background-color: #3498db; color: white; }
-        .result { margin-top: 20px; padding: 15px; background-color: #e8f4fd; border-radius: 4px; text-align: center; }
-        #fare-text { font-size: 26px; color: #e74c3c; font-weight: bold; }
+        body { font-family: 'Malgun Gothic', sans-serif; padding: 20px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 650px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h2 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; margin-bottom: 25px; text-align: center; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; font-size: 14px; color: #555; }
+        select, input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
+        .btn-box { display: flex; gap: 10px; margin-top: 15px; }
+        button { flex: 1; padding: 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s; }
+        .btn-api { background-color: #2ecc71; color: white; }
+        .btn-api:hover { background-color: #27ae60; }
+        .btn-calc { background-color: #3498db; color: white; margin-top: 15px; width: 100%; }
+        .btn-calc:hover { background-color: #2980b9; }
+        .result { margin-top: 25px; padding: 20px; background-color: #f8fbff; border: 1px solid #d6e9ff; border-radius: 8px; text-align: center; }
+        #fare-text { font-size: 32px; color: #e74c3c; font-weight: bold; }
+        .info-text { font-size: 12px; color: #95a5a6; margin-top: 12px; line-height: 1.4; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>Yobi_Easier 전국판 (v2.0)</h2>
+        <h2>Yobi_Easier (전남 교육행정용)</h2>
         
         <div class="input-group">
-            <label>1. 노선 및 등급 선택</label>
+            <label>① 버스 등급 선택</label>
             <select id="busType">
                 <option value="intercity">시외직행 (표준)</option>
                 <option value="express">고속일반</option>
-                <option value="premium">고속우등 (2026 요율)</option>
+                <option value="premium">고속우등 (우등고속)</option>
             </select>
         </div>
 
         <div class="input-group">
-            <label>2. 출발지 선택</label>
+            <label>② 출발 터미널 선택</label>
             <select id="depTerminal">
+                <option value="NAEK010">광주(유스퀘어)</option>
+                <option value="NAEK501">남악(전남도청/교육청)</option>
+                <option value="NAEK500">목포</option>
+                <option value="NAEK510">여수</option>
+                <option value="NAEK505">순천</option>
+                <option value="NAEK530">나주</option>
+                <option value="NAEK532">빛가람(혁신도시)</option>
+                <option value="NAEK540">무안</option>
+                <option value="NAEK590">해남</option>
+                <option value="NAEK620">완도</option>
+                <option value="NAEK630">진도</option>
+                <option value="NAEK570">영암</option>
+                <option value="NAEK580">강진</option>
+                <option value="NAEK600">보성</option>
+                <option value="NAEK610">고흥</option>
+                <option value="NAEK585">장흥</option>
+                <option value="NAEK560">화순</option>
+                <option value="NAEK550">영광</option>
+                <option value="NAEK545">함평</option>
+                <option value="NAEK520">담양</option>
+                <option value="NAEK525">곡성</option>
+                <option value="NAEK527">구례</option>
+                <option value="NAEK535">장성</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <label>③ 도착 터미널 선택</label>
+            <select id="arrTerminal">
+                <option value="NAEK501">남악(전남도청/교육청)</option>
                 <option value="NAEK010">광주(유스퀘어)</option>
                 <option value="NAEK500">목포</option>
                 <option value="NAEK510">여수</option>
                 <option value="NAEK505">순천</option>
                 <option value="NAEK530">나주</option>
-                <option value="NAEK501">남악(전남도청)</option>
-            </select>
-        </div>
-
-        <div class="input-group">
-            <label>3. 도착지 선택</label>
-            <select id="arrTerminal">
-                <option value="NAEK501">남악(전남도청)</option>
-                <option value="NAEK500">목포</option>
-                <option value="NAEK010">광주(유스퀘어)</option>
+                <option value="NAEK540">무안</option>
+                <option value="NAEK590">해남</option>
                 <option value="NAEK620">완도</option>
                 <option value="NAEK630">진도</option>
+                <option value="NAEK570">영암</option>
+                <option value="NAEK580">강진</option>
+                <option value="NAEK600">보성</option>
+                <option value="NAEK610">고흥</option>
+                <option value="NAEK585">장흥</option>
+                <option value="NAEK560">화순</option>
+                <option value="NAEK550">영광</option>
+                <option value="NAEK545">함평</option>
+                <option value="NAEK520">담양</option>
+                <option value="NAEK525">곡성</option>
+                <option value="NAEK527">구례</option>
+                <option value="NAEK535">장성</option>
             </select>
         </div>
 
         <div class="btn-box">
-            <button class="btn-api" onclick="getDistance()">거리 자동 조회</button>
+            <button class="btn-api" onclick="getDistance()">거리 자동 조회 (API)</button>
         </div>
 
         <div class="input-group" style="margin-top:20px;">
-            <label>4. 확인된 거리 (km)</label>
-            <input type="number" id="distance" placeholder="자동 조회 또는 직접 입력" step="0.1">
+            <label>④ 확인된 거리 (km)</label>
+            <input type="number" id="distance" placeholder="거리 정보가 여기에 표시됩니다" step="0.1">
         </div>
 
         <button class="btn-calc" onclick="calculateFare()">최종 여비 계산</button>
 
         <div class="result">
-            산출된 여비: <span id="fare-text">0</span>원
-            <p style="font-size: 11px; color: #7f8c8d;">* 실시간 API 거리 정보 및 2026 요율 적용</p>
+            산출 여비: <span id="fare-text">0</span>원
+            <div class="info-text">
+                * 공공데이터포털(TAGO) 실시간 거리 데이터 기반<br>
+                * 2026.01.20 개정 운임요율 및 사사오입 규정 적용
+            </div>
         </div>
     </div>
 
     <script>
         const SERVICE_KEY = "47a79741c5cfeead2314a79c59b1c6114705107cc1066d9cd366a2d9333e5422";
 
-        // [기능 1] API 연동 거리 조회
         async function getDistance() {
             const depId = document.getElementById('depTerminal').value;
             const arrId = document.getElementById('arrTerminal').value;
             
-            // 공공데이터포털 시외버스 노선정보 URL (JSON 형식 요청)
+            if(depId === arrId) { alert("출발지와 도착지가 같습니다."); return; }
+
             const url = `https://apis.data.go.kr/1613000/SuburbsBusInfoService/getRouteInfo?serviceKey=${SERVICE_KEY}&depTerminalId=${depId}&arrTerminalId=${arrId}&_type=json`;
 
             try {
                 const response = await fetch(url);
                 const data = await response.json();
                 
-                // API 결과에서 거리 추출 (구조에 따라 확인 필요)
-                const routeDistance = data.response.body.items.item.routeDistance;
+                // API 데이터 구조에 따른 거리 추출 로직
+                const item = data.response.body.items.item;
+                const routeDistance = Array.isArray(item) ? item[0].routeDistance : item.routeDistance;
                 
                 if (routeDistance) {
                     document.getElementById('distance').value = routeDistance;
-                    alert("거리 정보를 성공적으로 가져왔습니다: " + routeDistance + "km");
                 } else {
-                    alert("해당 노선의 거리 정보를 찾을 수 없습니다. 수동으로 입력해주세요.");
+                    alert("해당 노선의 거리 정보를 찾을 수 없습니다. 수동으로 입력해 주세요.");
                 }
             } catch (error) {
-                console.error(error);
-                alert("API 호출 중 오류가 발생했습니다. 인증키 승인 대기 중이거나 네트워크 문제일 수 있습니다.");
+                alert("API 호출에 실패했습니다. 인증키 승인 대기 중이거나 일시적인 네트워크 오류일 수 있습니다.");
             }
         }
 
-        // [기능 2] 여비 계산 로직
         function calculateFare() {
             const distance = parseFloat(document.getElementById('distance').value);
             const type = document.getElementById('busType').value;
 
-            if (!distance) { alert("거리를 먼저 확인해주세요."); return; }
+            if (!distance || distance <= 0) { alert("거리 정보를 먼저 확보해 주세요."); return; }
 
+            // 2026.01.20 개정 요율
             const RATES = { intercity: 168.60, express: 81.40, premium: 115.00 };
             const BASE_FARE = 1800;
 
-            let finalFare = distance <= 10 ? BASE_FARE : BASE_FARE + (distance - 10) * RATES[type];
-            const roundedFare = Math.round(finalFare / 100) * 100;
+            let fare = distance <= 10 ? BASE_FARE : BASE_FARE + (distance - 10) * RATES[type];
             
-            document.getElementById('fare-text').innerText = roundedFare.toLocaleString();
+            // 100원 단위 사사오입
+            const finalFare = Math.round(fare / 100) * 100;
+            
+            document.getElementById('fare-text').innerText = finalFare.toLocaleString();
         }
     </script>
 </body>
