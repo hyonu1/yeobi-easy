@@ -3,120 +3,132 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>yeobi_easy for KOR</title>
+    <title>yeobi_easy for KOR (2026)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-        :root { --color-teal: #00BFA5; --font-pretendard: 'Pretendard', sans-serif; }
-        body { font-family: var(--font-pretendard); background-color: #F7F9FB; -webkit-font-smoothing: antialiased; }
-        .btn-primary { background-color: var(--color-teal); color: white; transition: all 0.2s; }
-        .animate-pulse-attention { animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
-        .result-card { background-color: #FFFFFF; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        body { font-family: 'Pretendard', sans-serif; background-color: #F8FAFC; -webkit-font-smoothing: antialiased; }
+        .custom-shadow { box-shadow: 0 10px 40px -10px rgba(0,0,0,0.05); }
+        .search-list::-webkit-scrollbar { width: 4px; }
+        .search-list::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState } = React;
-
-        const API_KEYS = {
-            VWORLD: "9F33F28D-CE1C-3EC7-97B1-02372785C3D5",
-            KAKAO: "abd4c66e871836a5163b02926df8c6f1" // REST API 키
-        };
-
-        const CONFIG = {
-            OUT_DAILY: 25000, OUT_MEAL: 25000, IN_DAILY_LONG: 20000, IN_DAILY_SHORT: 10000
-        };
+        const { useState, useEffect } = React;
 
         const App = () => {
+            const [distanceDB, setDistanceDB] = useState([]);
+            const [institutions, setInstitutions] = useState([]);
             const [origin, setOrigin] = useState('');
             const [destination, setDestination] = useState('');
             const [distance, setDistance] = useState(0);
-            const [travelType, setTravelType] = useState('OUT');
-            const [showDetail, setShowDetail] = useState(false);
-            const [deductions, setDeductions] = useState({ gov_vehicle: false, short_time: false, meal_count: 0 });
+            const [isLoading, setIsLoading] = useState(true);
+            const [filteredOrigin, setFilteredOrigin] = useState([]);
+            const [filteredDest, setFilteredDest] = useState([]);
 
-            // 1. 주소를 좌표로 변환 (Vworld)
-            const getCoords = async (address) => {
-                const url = `https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4324&address=${encodeURIComponent(address)}&refine=true&simple=false&format=json&type=both&key=${API_KEYS.VWORLD}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                return data.response.status === "OK" ? data.response.result.point : null;
-            };
-
-            // 2. 좌표로 최적 경로 거리 계산 (Kakao Mobility)
-            const getNaviDistance = async () => {
-                try {
-                    const startPos = await getCoords(origin);
-                    const endPos = await getCoords(destination);
-                    if (!startPos || !endPos) { alert("주소를 확인해주세요."); return; }
-
-                    const url = `https://apis-navi.kakaomobility.com/v1/directions?origin=${startPos.x},${startPos.y}&destination=${endPos.x},${endPos.y}&summary=true`;
-                    const res = await fetch(url, {
-                        headers: { Authorization: `KakaoAK ${API_KEYS.KAKAO}` }
-                    });
-                    const data = await res.json();
-                    
-                    if (data.routes && data.routes[0]) {
-                        const distKm = (data.routes[0].summary.distance / 1000).toFixed(1);
-                        setDistance(distKm);
-                        alert(`최적 경로 탐색 완료: 편도 ${distKm}km`);
+            // CSV 로드
+            useEffect(() => {
+                Papa.parse("Korea_Education_Distance_Matrix_Full_2026.csv", {
+                    download: true,
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        const data = results.data;
+                        setDistanceDB(data);
+                        const uniqueOffices = [...new Set(data.map(item => item.출발기관))].sort();
+                        setInstitutions(uniqueOffices);
+                        setIsLoading(false);
                     }
-                } catch (e) { alert("거리 조회 중 오류가 발생했습니다."); }
+                });
+            }, []);
+
+            const handleSearch = (value, target) => {
+                if (target === 'origin') {
+                    setOrigin(value);
+                    setFilteredOrigin(value ? institutions.filter(i => i.includes(value)) : []);
+                } else {
+                    setDestination(value);
+                    setFilteredDest(value ? institutions.filter(i => i.includes(value)) : []);
+                }
             };
 
-            const costs = (() => {
-                let daily = travelType === 'OUT' ? CONFIG.OUT_DAILY : (deductions.short_time ? CONFIG.IN_DAILY_SHORT : CONFIG.IN_DAILY_LONG);
-                if (deductions.gov_vehicle) daily = travelType === 'OUT' ? daily / 2 : daily - 10000;
-                let meal = travelType === 'OUT' ? CONFIG.OUT_MEAL - (deductions.meal_count * 8330) : 0;
-                let transport = travelType === 'OUT' ? Math.round((1800 + (distance > 10 ? (distance - 10) * 168.6 : 0)) / 100) * 100 * 2 : 0;
-                return { daily, meal, transport, total: daily + meal + transport };
-            })();
+            const selectOffice = (name, target) => {
+                if (target === 'origin') { setOrigin(name); setFilteredOrigin([]); }
+                else { setDestination(name); setFilteredDest([]); }
+            };
+
+            const findDistance = () => {
+                const match = distanceDB.find(item => 
+                    (item.출발기관 === origin && item.도착기관 === destination) ||
+                    (item.출발기관 === destination && item.도착기관 === origin)
+                );
+                if (match) setDistance(parseFloat(match.편도거리_km));
+                else alert("정확한 기관명을 선택해 주세요.");
+            };
 
             return (
-                <div className="max-w-[480px] mx-auto p-5 min-h-screen">
-                    <header className="text-center mb-8">
-                        <h1 className="text-xl font-bold text-gray-900">yeobi_easy for KOR</h1>
-                        <p className="text-[10px] font-bold text-teal-500">Navigation & Audit Guide</p>
+                <div className="max-w-[480px] mx-auto p-6 min-h-screen">
+                    <header className="text-center mb-10 mt-4">
+                        <h1 className="text-2xl font-black text-slate-900 tracking-tighter">yeobi_easy for KOR</h1>
+                        <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-white border border-slate-100 rounded-full custom-shadow">
+                            <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`}></span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                {isLoading ? 'Syncing Database...' : 'Audit-Ready DB Connected'}
+                            </span>
+                        </div>
                     </header>
 
-                    <div className="space-y-3 mb-6">
-                        <input className="w-full p-4 rounded-2xl bg-white shadow-sm outline-teal-500 font-bold" placeholder="출발 행정구역 (예: 함평군청)" value={origin} onChange={e=>setOrigin(e.target.value)} />
-                        <input className="w-full p-4 rounded-2xl bg-white shadow-sm outline-teal-500 font-bold" placeholder="도착 행정구역 (예: 목포시청)" value={destination} onChange={e=>setDestination(e.target.value)} />
-                        <div className="flex gap-2">
-                            <button onClick={() => setTravelType('IN')} className={`flex-1 p-3 rounded-xl font-bold ${travelType === 'IN' ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-400'}`}>관내</button>
-                            <button onClick={() => setTravelType('OUT')} className={`flex-1 p-3 rounded-xl font-bold ${travelType === 'OUT' ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-400'}`}>관외</button>
+                    <div className="space-y-5">
+                        <div className="relative">
+                            <label className="text-[10px] font-black text-slate-400 ml-1 mb-1.5 block uppercase tracking-wider">Origin</label>
+                            <input className="w-full p-4 bg-white rounded-2xl border-none ring-1 ring-slate-100 focus:ring-2 focus:ring-slate-900 transition-all outline-none font-bold text-slate-700" placeholder="출발 기관 입력" value={origin} onChange={(e) => handleSearch(e.target.value, 'origin')} />
+                            {filteredOrigin.length > 0 && (
+                                <ul className="absolute z-50 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-50 max-h-56 overflow-y-auto search-list">
+                                    {filteredOrigin.map(name => (
+                                        <li key={name} onClick={() => selectOffice(name, 'origin')} className="p-4 hover:bg-slate-50 cursor-pointer text-sm font-semibold text-slate-600 border-b border-slate-50 last:border-none">{name}</li>
+                                    ))}
+                                </ul>
+                            )}
                         </div>
-                        {travelType === 'OUT' && (
-                            <button onClick={getNaviDistance} className="w-full p-3 bg-teal-50 text-teal-600 rounded-xl font-bold text-xs">최적 경로 거리 자동 계산 (Kakao)</button>
-                        )}
+
+                        <div className="relative">
+                            <label className="text-[10px] font-black text-slate-400 ml-1 mb-1.5 block uppercase tracking-wider">Destination</label>
+                            <input className="w-full p-4 bg-white rounded-2xl border-none ring-1 ring-slate-100 focus:ring-2 focus:ring-slate-900 transition-all outline-none font-bold text-slate-700" placeholder="도착 기관 입력" value={destination} onChange={(e) => handleSearch(e.target.value, 'destination')} />
+                            {filteredDest.length > 0 && (
+                                <ul className="absolute z-50 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-50 max-h-56 overflow-y-auto search-list">
+                                    {filteredDest.map(name => (
+                                        <li key={name} onClick={() => selectOffice(name, 'destination')} className="p-4 hover:bg-slate-50 cursor-pointer text-sm font-semibold text-slate-600 border-b border-slate-50 last:border-none">{name}</li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+
+                        <button onClick={findDistance} disabled={isLoading} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-bold active:scale-[0.98] transition-all shadow-xl shadow-slate-200 disabled:opacity-30">
+                            표준 거리 데이터 확정
+                        </button>
                     </div>
 
-                    <div className="result-card p-8 text-center mb-6">
-                        <span className="text-[10px] font-bold text-gray-400">Estimated One-way Distance</span>
-                        <h2 className="text-5xl font-black text-gray-900 mt-4">{travelType === 'OUT' ? distance : 0}<span className="text-xl font-medium ml-1">km</span></h2>
-                        <button onClick={() => setShowDetail(!showDetail)} className="w-full mt-8 py-4 btn-primary rounded-2xl font-bold animate-pulse-attention">여비 상세 계산하기</button>
-                    </div>
-
-                    {showDetail && (
-                        <div className="bg-white rounded-3xl p-6 shadow-xl border border-teal-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="font-bold text-gray-800">정산 상세 내역</h3>
-                                <button onClick={() => setDeductions(p=>({...p, gov_vehicle: !p.gov_vehicle}))} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${deductions.gov_vehicle ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-400'}`}>관용차량</button>
-                            </div>
-                            <div className="space-y-3 text-sm">
-                                <div className="flex justify-between"><span>일비 (2026 개정)</span><span className="font-bold">{costs.daily.toLocaleString()}원</span></div>
-                                <div className="flex justify-between"><span>식비 (관외 기준)</span><span className="font-bold">{costs.meal.toLocaleString()}원</span></div>
-                                <div className="flex justify-between"><span>왕복 교통비 (실비)</span><span className="font-bold">{costs.transport.toLocaleString()}원</span></div>
-                                <div className="pt-4 border-t border-dashed flex justify-between font-black text-teal-600"><span>총 합계</span><span>{costs.total.toLocaleString()}원</span></div>
-                            </div>
+                    <div className="mt-12 p-10 bg-white rounded-[40px] custom-shadow text-center border border-white">
+                        <p className="text-[10px] font-black text-slate-300 tracking-[0.2em] uppercase">One-way Distance</p>
+                        <div className="mt-4 flex justify-center items-baseline gap-1">
+                            <h2 className="text-7xl font-black text-slate-900 tabular-nums">{distance}</h2>
+                            <span className="text-xl font-bold text-slate-400">km</span>
                         </div>
-                    )}
+                    </div>
+                    
+                    <footer className="mt-12 text-center">
+                        <p className="text-[9px] font-bold text-slate-300 leading-relaxed italic">
+                            * 본 데이터는 2026년도 교육행정 여비 지침에 따른 객관적 산출 근거로 활용 가능합니다.<br/>
+                            (관외 일비 25,000원 기준 거리 판정용)
+                        </p>
+                    </footer>
                 </div>
             );
         };
