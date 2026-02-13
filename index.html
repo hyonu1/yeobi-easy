@@ -3,37 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>yeobi_easy for KOR (2026)</title>
+    <title>yeobi_easy for KOR</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- PapaParse (CSV 로더) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
+        /* Pretendard & SUIT Font */
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-        body { font-family: 'Pretendard', sans-serif; background-color: #F8FAFC; -webkit-font-smoothing: antialiased; }
-        .custom-shadow { box-shadow: 0 10px 40px -10px rgba(0,0,0,0.05); }
-        .search-list::-webkit-scrollbar { width: 4px; }
-        .search-list::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
+        @import url('https://cdn.jsdelivr.net/gh/sunn-us/SUIT/fonts/static/woff2/SUIT.css');
+        
+        :root {
+            --font-suit: 'SUIT', sans-serif;
+            --font-pretendard: 'Pretendard', sans-serif;
+            --color-teal: #00BFA5;
+            --color-bg-card: #F7F9FB;
+            --color-text-main: #191F28;
+        }
+
+        body { 
+            font-family: var(--font-pretendard);
+            background-color: #FFFFFF;
+            color: var(--color-text-main);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Animations from original file */
+        @keyframes pulse-attention {
+            0%, 100% { transform: scale(1); box-shadow: 0 4px 12px rgba(0, 191, 165, 0.2); }
+            50% { transform: scale(1.03); box-shadow: 0 0 0 4px rgba(0, 191, 165, 0.15); }
+        }
+        .animate-pulse-attention { 
+            animation: pulse-attention 2.5s infinite cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+
+        /* 3D Flip Effects */
+        .perspective-1000 { perspective: 1000px; }
+        .flip-card-inner { transition: transform 0.6s; transform-style: preserve-3d; position: relative; width: 100%; height: 100%; }
+        .is-flipped { transform: rotateY(180deg); }
+        .flip-card-front, .flip-card-back { 
+            backface-visibility: hidden; 
+            position: absolute; 
+            width: 100%; 
+            height: 100%; 
+            top: 0; 
+            left: 0; 
+            border-radius: 20px;
+            background-color: var(--color-bg-card);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        }
+        .flip-card-back { transform: rotateY(180deg); overflow-y: auto; }
+
+        /* Custom Scroll */
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background-color: #E5E8EB; border-radius: 4px; }
+        
+        /* Input & Dropdown */
+        .search-dropdown {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-top: none;
+            background: white;
+            position: absolute;
+            width: 100%;
+            z-index: 50;
+            border-radius: 0 0 12px 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
+
+        // 1. 2026 전남 교육행정 여비 규정 상수
+        const CONFIG = {
+            OUT_DAILY: 25000,   // 관외 일비 (2026 인상)
+            OUT_MEAL: 25000,    // 관외 식비 (1식 8,330원)
+            IN_DAILY_LONG: 20000, // 관내 4시간 이상
+            IN_DAILY_SHORT: 10000,// 관내 4시간 미만
+            BUS_RATE: 168.6,    // 시외버스 표준 요율
+            BASE_FARE: 1800     // 기본 요금
+        };
+
+        // 2. 도서 지역 승선료 DB (반값 할인 적용 실비)
+        const FERRY_DB = { 
+            "흑산": 20550, "하의": 5930, "신의": 5930, "비금": 10500, 
+            "도초": 10500, "청산": 3850, "노화": 3850, "조도": 5000, "완도": 0, "진도": 0 
+        };
+
+        // 아이콘 컴포넌트 (기존 스타일 유지)
+        const Icons = {
+            Search: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
+            Refresh: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>,
+            ArrowRight: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>,
+            MapPin: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        };
+
+        // 자동완성 입력 컴포넌트
+        const AutocompleteInput = ({ label, value, onChange, onSelect, list }) => {
+            const [suggestions, setSuggestions] = useState([]);
+            const [showSuggestions, setShowSuggestions] = useState(false);
+
+            useEffect(() => {
+                if (!value) { setSuggestions([]); return; }
+                if (list.includes(value)) { setSuggestions([]); return; } // 완벽 일치 시 숨김
+                
+                const filtered = list.filter(item => item.includes(value)).slice(0, 10); // 최대 10개
+                setSuggestions(filtered);
+            }, [value, list]);
+
+            return (
+                <div className="relative group">
+                    <div className="bg-white rounded-2xl p-4 flex items-center gap-3 border border-transparent focus-within:border-[#00BFA5] shadow-sm transition-all">
+                        <Icons.MapPin />
+                        <div className="flex-1">
+                            <label className="block text-[10px] font-bold text-gray-400 mb-1">{label}</label>
+                            <input 
+                                type="text" 
+                                className="w-full bg-transparent outline-none font-suit font-bold text-lg text-gray-800 placeholder-gray-300"
+                                placeholder={`${label} 입력 (예: 함평)`}
+                                value={value}
+                                onChange={(e) => { onChange(e.target.value); setShowSuggestions(true); }}
+                                onFocus={() => setShowSuggestions(true)}
+                                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                            />
+                        </div>
+                    </div>
+                    {showSuggestions && suggestions.length > 0 && (
+                        <ul className="search-dropdown custom-scroll">
+                            {suggestions.map((item, idx) => (
+                                <li key={idx} onClick={() => onSelect(item)} className="p-3 hover:bg-teal-50 cursor-pointer text-sm font-medium text-gray-700">
+                                    {item}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            );
+        };
 
         const App = () => {
+            // Data States
             const [distanceDB, setDistanceDB] = useState([]);
             const [institutions, setInstitutions] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+
+            // User Input States
             const [origin, setOrigin] = useState('');
             const [destination, setDestination] = useState('');
             const [distance, setDistance] = useState(0);
-            const [isLoading, setIsLoading] = useState(true);
-            const [filteredOrigin, setFilteredOrigin] = useState([]);
-            const [filteredDest, setFilteredDest] = useState([]);
+            
+            // UI States
+            const [isFlipped, setIsFlipped] = useState(false);
+            const [deductions, setDeductions] = useState({
+                gov_vehicle: false,
+                meal_count: 0
+            });
 
-            // CSV 로드
+            // 1. CSV 데이터 로드 (내구성 핵심)
             useEffect(() => {
                 Papa.parse("Korea_Education_Distance_Matrix_Full_2026.csv", {
                     download: true,
@@ -42,99 +178,127 @@
                     complete: (results) => {
                         const data = results.data;
                         setDistanceDB(data);
-                        const uniqueOffices = [...new Set(data.map(item => item.출발기관))].sort();
+                        // 기관명 중복 제거 및 정렬
+                        const uniqueOffices = [...new Set([...data.map(i => i.출발기관), ...data.map(i => i.도착기관)])].sort();
                         setInstitutions(uniqueOffices);
                         setIsLoading(false);
+                    },
+                    error: (err) => {
+                        console.error("CSV Load Error:", err);
+                        setIsLoading(false); // 실패해도 앱은 켜지도록
                     }
                 });
             }, []);
 
-            const handleSearch = (value, target) => {
-                if (target === 'origin') {
-                    setOrigin(value);
-                    setFilteredOrigin(value ? institutions.filter(i => i.includes(value)) : []);
-                } else {
-                    setDestination(value);
-                    setFilteredDest(value ? institutions.filter(i => i.includes(value)) : []);
+            // 2. 거리 자동 조회 로직
+            useEffect(() => {
+                if (origin && destination && distanceDB.length > 0) {
+                    const match = distanceDB.find(item => 
+                        (item.출발기관 === origin && item.도착기관 === destination) ||
+                        (item.출발기관 === destination && item.도착기관 === origin)
+                    );
+                    if (match) {
+                        setDistance(parseFloat(match.편도거리_km));
+                    }
                 }
+            }, [origin, destination, distanceDB]);
+
+            // 3. 비용 계산 로직 (여비/편도교통비)
+            const calculateCosts = () => {
+                const isInterCity = distance > 12; // 12km 기준 관내/관외 판정
+                
+                // 일비 (관용차 50% 감액)
+                let daily = isInterCity ? CONFIG.OUT_DAILY : CONFIG.IN_DAILY_LONG; 
+                if (!isInterCity && distance <= 0) daily = CONFIG.IN_DAILY_LONG; // 기본값
+                if (deductions.gov_vehicle) daily = isInterCity ? daily / 2 : daily - 10000;
+
+                // 식비 (제공 식수 차감)
+                let meal = isInterCity ? CONFIG.OUT_MEAL - (deductions.meal_count * Math.floor(CONFIG.OUT_MEAL / 3)) : 0;
+
+                // 교통비 (편도) - 거리비례제
+                let oneWayTransport = Math.round((CONFIG.BASE_FARE + (distance > 10 ? (distance - 10) * CONFIG.BUS_RATE : 0)) / 100) * 100;
+                
+                // 승선료 자동 합산
+                let ferryFare = 0;
+                Object.keys(FERRY_DB).forEach(island => {
+                    if (destination.includes(island)) ferryFare = FERRY_DB[island];
+                });
+
+                // 총액 (왕복 교통비 + 왕복 승선료 + 일비 + 식비)
+                const totalTransport = (oneWayTransport * 2) + (ferryFare * 2);
+                const total = daily + meal + totalTransport;
+
+                return { daily, meal, oneWayTransport, ferryFare, totalTransport, total };
             };
 
-            const selectOffice = (name, target) => {
-                if (target === 'origin') { setOrigin(name); setFilteredOrigin([]); }
-                else { setDestination(name); setFilteredDest([]); }
-            };
-
-            const findDistance = () => {
-                const match = distanceDB.find(item => 
-                    (item.출발기관 === origin && item.도착기관 === destination) ||
-                    (item.출발기관 === destination && item.도착기관 === origin)
-                );
-                if (match) setDistance(parseFloat(match.편도거리_km));
-                else alert("정확한 기관명을 선택해 주세요.");
-            };
+            const costs = calculateCosts();
 
             return (
-                <div className="max-w-[480px] mx-auto p-6 min-h-screen">
-                    <header className="text-center mb-10 mt-4">
-                        <h1 className="text-2xl font-black text-slate-900 tracking-tighter">yeobi_easy for KOR</h1>
-                        <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-white border border-slate-100 rounded-full custom-shadow">
-                            <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`}></span>
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                {isLoading ? 'Syncing Database...' : 'Audit-Ready DB Connected'}
+                <div className="max-w-[480px] mx-auto min-h-screen flex flex-col p-6 bg-white">
+                    <header className="text-center mb-8 mt-4">
+                        <h1 className="text-2xl font-bold font-suit text-gray-900 tracking-tight">yeobi_easy for KOR</h1>
+                        <div className="flex items-center justify-center gap-2 mt-2">
+                            <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-orange-400 animate-pulse' : 'bg-[#00BFA5]'}`}></span>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                {isLoading ? 'DB Loading...' : '2026 Audit Ready'}
                             </span>
                         </div>
                     </header>
 
-                    <div className="space-y-5">
-                        <div className="relative">
-                            <label className="text-[10px] font-black text-slate-400 ml-1 mb-1.5 block uppercase tracking-wider">Origin</label>
-                            <input className="w-full p-4 bg-white rounded-2xl border-none ring-1 ring-slate-100 focus:ring-2 focus:ring-slate-900 transition-all outline-none font-bold text-slate-700" placeholder="출발 기관 입력" value={origin} onChange={(e) => handleSearch(e.target.value, 'origin')} />
-                            {filteredOrigin.length > 0 && (
-                                <ul className="absolute z-50 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-50 max-h-56 overflow-y-auto search-list">
-                                    {filteredOrigin.map(name => (
-                                        <li key={name} onClick={() => selectOffice(name, 'origin')} className="p-4 hover:bg-slate-50 cursor-pointer text-sm font-semibold text-slate-600 border-b border-slate-50 last:border-none">{name}</li>
-                                    ))}
-                                </ul>
-                            )}
+                    {/* 입력 섹션 */}
+                    <div className="space-y-4 mb-8 relative z-20">
+                        <AutocompleteInput 
+                            label="출발 기관" 
+                            value={origin} 
+                            onChange={setOrigin} 
+                            onSelect={setOrigin} 
+                            list={institutions} 
+                        />
+                        <div className="flex justify-center -my-2 relative z-10">
+                            <div className="bg-white p-1 rounded-full border border-gray-100 shadow-sm">
+                                <Icons.ArrowRight />
+                            </div>
                         </div>
-
-                        <div className="relative">
-                            <label className="text-[10px] font-black text-slate-400 ml-1 mb-1.5 block uppercase tracking-wider">Destination</label>
-                            <input className="w-full p-4 bg-white rounded-2xl border-none ring-1 ring-slate-100 focus:ring-2 focus:ring-slate-900 transition-all outline-none font-bold text-slate-700" placeholder="도착 기관 입력" value={destination} onChange={(e) => handleSearch(e.target.value, 'destination')} />
-                            {filteredDest.length > 0 && (
-                                <ul className="absolute z-50 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-50 max-h-56 overflow-y-auto search-list">
-                                    {filteredDest.map(name => (
-                                        <li key={name} onClick={() => selectOffice(name, 'destination')} className="p-4 hover:bg-slate-50 cursor-pointer text-sm font-semibold text-slate-600 border-b border-slate-50 last:border-none">{name}</li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-
-                        <button onClick={findDistance} disabled={isLoading} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-bold active:scale-[0.98] transition-all shadow-xl shadow-slate-200 disabled:opacity-30">
-                            표준 거리 데이터 확정
-                        </button>
+                        <AutocompleteInput 
+                            label="도착 기관" 
+                            value={destination} 
+                            onChange={setDestination} 
+                            onSelect={setDestination} 
+                            list={institutions} 
+                        />
                     </div>
 
-                    <div className="mt-12 p-10 bg-white rounded-[40px] custom-shadow text-center border border-white">
-                        <p className="text-[10px] font-black text-slate-300 tracking-[0.2em] uppercase">One-way Distance</p>
-                        <div className="mt-4 flex justify-center items-baseline gap-1">
-                            <h2 className="text-7xl font-black text-slate-900 tabular-nums">{distance}</h2>
-                            <span className="text-xl font-bold text-slate-400">km</span>
-                        </div>
-                    </div>
-                    
-                    <footer className="mt-12 text-center">
-                        <p className="text-[9px] font-bold text-slate-300 leading-relaxed italic">
-                            * 본 데이터는 2026년도 교육행정 여비 지침에 따른 객관적 산출 근거로 활용 가능합니다.<br/>
-                            (관외 일비 25,000원 기준 거리 판정용)
-                        </p>
-                    </footer>
-                </div>
-            );
-        };
+                    {/* 결과 카드 (Flip UI) */}
+                    <div className="perspective-1000 h-[420px] w-full relative z-10">
+                        <div className={`flip-card-inner ${isFlipped ? 'is-flipped' : ''}`}>
+                            
+                            {/* FRONT: 편도 교통비 & 거리 (요청하신 부분) */}
+                            <div className="flip-card-front flex flex-col justify-between p-8 border border-gray-100">
+                                <div>
+                                    <div className="flex justify-between items-start mb-8">
+                                        <span className="text-xs font-bold text-[#00BFA5] bg-teal-50 px-2 py-1 rounded-md">편도 기준</span>
+                                        {costs.ferryFare > 0 && <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-md">도서지역 승선료 포함</span>}
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-xs font-bold text-gray-400 mb-1">예상 편도 거리</p>
+                                        <div className="flex justify-center items-baseline gap-1 mb-6">
+                                            <h2 className="text-5xl font-black text-gray-900">{distance}</h2>
+                                            <span className="text-lg font-bold text-gray-400">km</span>
+                                        </div>
+                                        
+                                        <div className="w-full border-t border-dashed border-gray-200 my-6"></div>
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+                                        <p className="text-xs font-bold text-gray-400 mb-1">편도 교통비 (운임)</p>
+                                        <h2 className="text-4xl font-black text-gray-900">
+                                            {(costs.oneWayTransport + costs.ferryFare).toLocaleString()}
+                                            <span className="text-lg font-medium text-gray-400 ml-1">원</span>
+                                        </h2>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => setIsFlipped(true)} 
+                                    className="w-full py-4 bg-[#00BFA5] text-white rounded-2xl font-bold text-sm shadow-lg shadow-teal-100 animate-pulse-attention active:scale-95 transition-transform"
+                                >
+                                    여비 계산 (일비/식비 포함)
+                                </button>
+                            </div>
